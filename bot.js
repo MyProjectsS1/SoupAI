@@ -3,6 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import http from "http";
 
+dotenv.config();
+
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
@@ -11,9 +13,6 @@ http.createServer((req, res) => {
 }).listen(port, () => {
   console.log(`Server Online; Port: ${port}`);
 });
-
-/*----------Discord-----------------*/
-dotenv.config();
 
 const client = new Client({
   intents: [
@@ -30,14 +29,13 @@ const API_KEYS = [
   process.env.GEMINI_API_KEY_4,
 ].filter(Boolean);
 
-/*----------Gemini-----------------*/
-let LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID
+let LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 let logChannel;
 let key_index = 0;
 
 function GeminiLoader() {
   const key = API_KEYS[key_index];
-  if (key == false) return null;
+  if (!key) return null;
   return new GoogleGenAI({
     apiKey: key,
   });
@@ -46,12 +44,10 @@ function GeminiLoader() {
 async function rotateKey() {
   if (API_KEYS.length === 0) return;
   key_index += 1;
-
   if (key_index >= API_KEYS.length) {
     key_index = 0;
   }
-  console.warn("API key changed, now using key number: ", key_index)
-
+  console.warn("API key changed, now using key number: ", key_index);
 }
 
 const PROMPT_VERSION = "2026-02-02-v1";
@@ -75,9 +71,7 @@ function AIready() {
 client.once("ready", AIready);
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) {
-    return;
-  }
+  if (message.author.bot) return;
 
   const userId = message.author.id;
   const text = message.content.trim();
@@ -89,14 +83,16 @@ client.on("messageCreate", async (message) => {
     userHistories.set(userId, []);
   }
   const history = userHistories.get(userId);
-        await logChannel.send({
-        content: "AI READY"
-      });
+  
+  if (logChannel) {
+    await logChannel.send({ content: "AI READY" });
+  }
+
   try {
     if (API_KEYS.length === 0) {
-      await logChannel.send({
-        content: "You didn't paid gemini pro, MISSING API KEY"
-      });
+      if (logChannel) {
+        await logChannel.send({ content: "You didn't paid gemini pro, MISSING API KEY" });
+      }
       console.warn("You didn't paid gemini pro, MISSING API KEY");
       return message.reply(
         "There was some internal problems and I can't give you an answer right now, sorry!"
@@ -106,36 +102,24 @@ client.on("messageCreate", async (message) => {
     const contents = [
       {
         role: "user",
-        parts: [
-          {
-            text: systemPrompt(),
-          },
-        ],
+        parts: [{ text: systemPrompt() }],
       },
       ...history.slice(-10).map((m) => ({
         role: m.role,
-        parts: [
-          {
-            text: m.text,
-          },
-        ],
+        parts: [{ text: m.text }],
       })),
       {
         role: "user",
-        parts: [
-          {
-            text,
-          },
-        ],
+        parts: [{ text }],
       },
     ];
 
     let response;
 
     try {
-      await logChannel.send({
-        content: "Using model 3.5 Flash"
-      });
+      if (logChannel) {
+        await logChannel.send({ content: "Using model 3.5 Flash" });
+      }
       console.log("Using model 3.5 Flash");
       const ai = GeminiLoader();
 
@@ -159,9 +143,9 @@ client.on("messageCreate", async (message) => {
         rotateKey();
 
         try {
-          await logChannel.send({
-            content: "(3.5 Flash didn't work) Using model 3.0 Flash"
-          });
+          if (logChannel) {
+            await logChannel.send({ content: "(3.5 Flash didn't work) Using model 3.0 Flash" });
+          }
           console.log("Using model 3.0 Flash");
           const newAIclient = GeminiLoader();
           response = await newAIclient.models.generateContent({
@@ -173,9 +157,9 @@ client.on("messageCreate", async (message) => {
             },
           });
         } catch (err) {
-          await logChannel.send({
-            content: "(3.1 flash-preview lite didn't work) Using model 3.1 Flash Lite"
-          });
+          if (logChannel) {
+            await logChannel.send({ content: "(3.1 flash-preview lite didn't work) Using model 3.1 Flash Lite" });
+          }
           console.log("Using model 3.1 Flash Lite");
           const newAIclient = GeminiLoader();
           response = await newAIclient.models.generateContent({
@@ -188,24 +172,18 @@ client.on("messageCreate", async (message) => {
           });
         }
       } else {  
-          await logChannel.send({
-            content: "None of the models worked :["
-          });
-          console.log("None of the models worked :[");
+        if (logChannel) {
+          await logChannel.send({ content: "None of the models worked :[" });
+        }
+        console.log("None of the models worked :[");
         throw err;
       }
     }
 
     const replyText = (response?.text || "").trim();
 
-    history.push({
-      role: "user",
-      text: text,
-    });
-    history.push({
-      role: "model",
-      text: replyText,
-    });
+    history.push({ role: "user", text: text });
+    history.push({ role: "model", text: replyText });
 
     if (replyText.length > 2000) {
       await message.reply(replyText.slice(0, 1990) + "...");
@@ -218,6 +196,14 @@ client.on("messageCreate", async (message) => {
       "There was some internal problems and I can't give you an answer right now, sorry!"
     );
   }
+});
+
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled promise rejection:", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
 });
 
 client.login(process.env.DISCORD_TOKEN);
