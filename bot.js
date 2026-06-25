@@ -6,10 +6,10 @@ import http from "http";
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
-  res.write("SOUP AI ONLINE");
+  res.write("Soup AI Server's online");
   res.end();
 }).listen(port, () => {
-  console.log(`Servidor ativo na porta ${port}`);
+  console.log(`Server Online; Port: ${port}`);
 });
 
 /*----------Discord-----------------*/
